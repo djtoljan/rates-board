@@ -1,0 +1,42 @@
+name: Update Exchange Rates
+
+on:
+  schedule:
+    - cron: '*/15 6-23 * * *'   # каждые 15 мин с 06:00 до 23:00 UTC
+  workflow_dispatch:              # ручной запуск
+
+concurrency:
+  group: rates-update
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps (only requests for XFeepay)
+        run: pip install requests
+
+      - name: Fetch rates
+        run: python3 update_rates.py
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name "rates-bot"
+          git config user.email "bot@rates.local"
+          git add rates.json
+          if ! git diff --staged --quiet; then
+            git commit -m "🔄 rates update $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git push
+          else
+            echo "No changes — skipping commit"
+          fi

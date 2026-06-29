@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rates Dashboard</title>
+<style>
+  :root {
+    --bg: #0a0c12;
+    --card: #131722;
+    --card-hover: #1a1f30;
+    --border: #1e2338;
+    --text: #d1d4dc;
+    --text-dim: #6b7280;
+    --accent: #00d4aa;
+    --bull: #00d4aa;
+    --bear: #f23645;
+    --gold: #f0b90b;
+    --blue: #5b6abf;
+    --pink: #e040a0;
+    --radius: 14px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    padding: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    line-height: 1.5;
+  }
+
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px; padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap; gap: 12px;
+  }
+  .header-left { display:flex; align-items:center; gap:14px; }
+  .logo { font-size:1.5rem; }
+  .header h1 {
+    font-size:1.4rem; font-weight:700;
+    background: linear-gradient(135deg, var(--accent), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header-status { display:flex; align-items:center; gap:8px; font-size:0.8rem; color:var(--text-dim); }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); }
+  .status-dot.stale { background: var(--gold); }
+  .status-dot.error { background: var(--bear); }
+
+  /* Grid */
+  .sources-grid {
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap:14px; margin-bottom:24px;
+  }
+
+  /* Card */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .card:hover { border-color: var(--accent); background: var(--card-hover); }
+  .card::before {
+    content: ''; position: absolute; top:0; left:0;
+    width:4px; height:100%; border-radius:0 4px 4px 0;
+    opacity:0.4;
+  }
+  .card[data-source="cbr"]::before { background: var(--blue); }
+  .card[data-source="investing"]::before { background: var(--pink); }
+  .card[data-source="xe"]::before { background: var(--accent); }
+  .card[data-source="xfee"]::before { background: var(--gold); }
+
+  .card-header {
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:14px;
+  }
+  .card-title {
+    font-size:0.85rem; font-weight:600; text-transform:uppercase;
+    letter-spacing:0.5px;
+  }
+  .card-badge {
+    font-size:0.6rem; padding:2px 8px; border-radius:20px;
+    font-weight:600; text-transform:uppercase;
+  }
+  .badge-ok { background: rgba(0,212,170,0.12); color: var(--accent); }
+  .badge-stale { background: rgba(240,185,11,0.12); color: var(--gold); }
+  .badge-err { background: rgba(242,54,69,0.12); color: var(--bear); }
+
+  /* Rate rows */
+  .rate-row {
+    display:flex; justify-content:space-between; align-items:center;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer; transition: background 0.15s;
+    border-radius: 4px; padding: 6px 8px; margin: 0 -8px;
+  }
+  .rate-row:hover { background: rgba(255,255,255,0.03); }
+  .rate-row:last-child { border-bottom:none; }
+  .rate-pair { font-weight:600; font-size:0.9rem; }
+  .rate-pair .flag { margin-right:6px; }
+  .rate-value { font-size:1.2rem; font-weight:700; }
+  .rate-value.bull { color: var(--bull); }
+  .rate-value.bear { color: var(--bear); }
+  .rate-change {
+    font-size:0.7rem; margin-left:8px; font-weight:600;
+  }
+  .sparkline { display:inline-block; vertical-align:middle; margin-left:8px; }
+
+  /* Calculator */
+  .calc-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom:14px;
+  }
+  .calc-section h2 {
+    font-size:1rem; font-weight:600; margin-bottom:14px;
+    display:flex; align-items:center; gap:8px;
+  }
+  .calc-row {
+    display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;
+  }
+  .calc-row input, .calc-row select {
+    background: #1e2338; border:1px solid var(--border);
+    color: var(--text); padding: 10px 14px; border-radius:8px;
+    font-size:0.95rem; outline:none; transition: border 0.2s;
+  }
+  .calc-row input:focus, .calc-row select:focus { border-color: var(--accent); }
+  .calc-row input { width:150px; }
+  .calc-row select { width:100px; cursor:pointer; }
+  .calc-row label { font-size:0.8rem; color:var(--text-dim); }
+
+  .calc-result {
+    margin-top:12px; padding:16px;
+    background: linear-gradient(135deg, #1a1f30, #131722);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+  }
+  .calc-result .big {
+    font-size:1.6rem; font-weight:700;
+    color: var(--accent);
+  }
+  .calc-result .detail { font-size:0.8rem; color:var(--text-dim); margin-top:4px; }
+
+  .quick-buttons {
+    display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;
+  }
+  .quick-btn {
+    background: #1e2338; border:1px solid var(--border);
+    color: var(--text); padding:6px 14px; border-radius:6px;
+    cursor:pointer; font-size:0.8rem; transition:all 0.2s;
+  }
+  .quick-btn:hover { border-color: var(--accent); }
+  .quick-btn.active {
+    background: rgba(0,212,170,0.12);
+    border-color: var(--accent); color: var(--accent);
+  }
+
+  /* Cross calc */
+  .calc-row.compact input { width:130px; }
+  .calc-row.compact select { width:80px; }
+  .swap-btn {
+    background: #1e2338; border:1px solid var(--border);
+    color: var(--text); padding:8px 10px; border-radius:8px;
+    cursor:pointer; font-size:1rem; transition:all 0.2s;
+  }
+  .swap-btn:hover { border-color: var(--accent); }
+
+  /* Footer */
+  .footer {
+    text-align:center; color:var(--text-dim); font-size:0.7rem;
+    margin-top:24px; padding-top:16px;
+    border-top: 1px solid var(--border);
+    display:flex; justify-content:center; gap:16px; flex-wrap:wrap;
+  }
+  .footer a { color:var(--text-dim); text-decoration:none; transition:color 0.2s; }
+  .footer a:hover { color: var(--accent); }
+
+  /* Loading skeleton */
+  .skeleton {
+    background: linear-gradient(90deg, #131722 25%, #1a1f30 50%, #131722 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 4px;
+  }
+  @keyframes shimmer { 0% { background-position:200% 0; } 100% { background-position:-200% 0; } }
+
+  /* Toast */
+  .toast {
+    position:fixed; bottom:20px; right:20px;
+    background: #1e2338; border:1px solid var(--border);
+    padding:12px 20px; border-radius:10px;
+    font-size:0.85rem; box-shadow:0 8px 30px rgba(0,0,0,0.4);
+    opacity:0; transform:translateY(20px); transition:all 0.3s;
+    z-index:999;
+  }
+  .toast.show { opacity:1; transform:translateY(0); }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from { opacity:0; transform:translateY(10px); }
+    to { opacity:1; transform:translateY(0); }
+  }
+  .card, .calc-section { animation: fadeIn 0.4s ease forwards; }
+  .card:nth-child(2) { animation-delay:0.05s; }
+  .card:nth-child(3) { animation-delay:0.1s; }
+  .card:nth-child(4) { animation-delay:0.15s; }
+
+  /* Comparison table */
+  .comp-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  .comp-table th {
+    text-align:left; padding:8px 10px;
+    border-bottom:1px solid var(--border);
+    font-size:0.7rem; text-transform:uppercase;
+    color:var(--text-dim); font-weight:600;
+  }
+  .comp-table td { padding:8px 10px; border-bottom:1px solid rgba(255,255,255,0.03); }
+  .comp-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .best-rate { color: var(--accent); font-weight:700; }
+
+  /* Responsive */
+  @media (max-width:600px) {
+    body { padding:12px; }
+    .header { flex-direction:column; align-items:flex-start; }
+    .sources-grid { grid-template-columns:1fr; }
+    .calc-row input { width:100%; }
+    .calc-row select { flex:1; }
+    .comp-table { font-size:0.75rem; }
+    .comp-table th, .comp-table td { padding:6px 6px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">📊</span>
+    <h1>Rates Dashboard</h1>
+  </div>
+  <div class="header-status">
+    <span class="status-dot" id="statusDot"></span>
+    <span id="statusText">Загрузка...</span>
+  </div>
+</div>
+
+<!-- Source Cards -->
+<div class="sources-grid" id="cardsContainer">
+  <div class="card" data-source="cbr">
+    <div class="card-header">
+      <span class="card-title">🏛 ЦБ РФ</span>
+      <span class="card-badge" id="cbr-badge">—</span>
+    </div>
+    <div id="cbr-rates"><span style="color:var(--text-dim)">Загрузка...</span></div>
+  </div>
+  <div class="card" data-source="investing">
+    <div class="card-header">
+      <span class="card-title">📈 Investing.com</span>
+      <span class="card-badge" id="investing-badge">—</span>
+    </div>
+    <div id="investing-rates"><span style="color:var(--text-dim)">Загрузка...</span></div>
+  </div>
+  <div class="card" data-source="xe">
+    <div class="card-header">
+      <span class="card-title">🔀 Кросс-курсы</span>
+      <span class="card-badge" id="xe-badge">—</span>
+    </div>
+    <div id="xe-rates"><span style="color:var(--text-dim)">Загрузка...</span></div>
+  </div>
+  <div class="card" data-source="xfee">
+    <div class="card-header">
+      <span class="card-title">💱 XFeepay</span>
+      <span class="card-badge" id="xfee-badge">—</span>
+    </div>
+    <div id="xfee-rates"><span style="color:var(--text-dim)">Загрузка...</span></div>
+  </div>
+</div>
+
+<!-- Comparison table -->
+<div class="calc-section">
+  <h2>📊 Сводная таблица</h2>
+  <div style="overflow-x:auto">
+    <table class="comp-table" id="compTable">
+      <thead>
+        <tr>
+          <th>Валюта</th>
+          <th>ЦБ РФ</th>
+          <th>Investing.com</th>
+          <th>Кросс-курс</th>
+          <th>XFeepay</th>
+          <th>Лучший</th>
+        </tr>
+      </thead>
+      <tbody id="compBody">
+        <tr><td colspan="6" style="color:var(--text-dim)">Загрузка...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Calculator 1: Simple -->
+<div class="calc-section" id="calc">
+  <h2>🧮 Конвертер в RUB</h2>
+  <div class="quick-buttons" id="sourceButtons">
+    <button class="quick-btn active" data-source="cbr">ЦБ РФ</button>
+    <button class="quick-btn" data-source="investing">Investing</button>
+  </div>
+  <div class="calc-row">
+    <input type="number" id="calcAmount" value="10000" step="any">
+    <select id="calcCurrency">
+      <option value="USD">USD</option>
+      <option value="EUR">EUR</option>
+      <option value="CNY">CNY</option>
+      <option value="TRY">TRY</option>
+    </select>
+    <span style="color:var(--text-dim);font-weight:600">→ RUB</span>
+  </div>
+  <div class="calc-result" id="calcResult">
+    <div class="big" id="calcBig">—</div>
+    <div class="detail" id="calcDetail">Выберите валюту и сумму</div>
+  </div>
+</div>
+
+<!-- Calculator 2: Cross -->
+<div class="calc-section" id="crossCalc">
+  <h2>🔀 Кросс-конвертер</h2>
+  <div class="quick-buttons" id="crossSourceButtons">
+    <button class="quick-btn active" data-source="xe">XE (рынок)</button>
+    <button class="quick-btn" data-source="xfee">XFeepay</button>
+  </div>
+  <div class="calc-row">
+    <input type="number" id="crossAmount" value="1000" step="any">
+    <select id="crossFrom">
+      <option value="EUR">EUR</option>
+      <option value="CNY">CNY</option>
+      <option value="TRY">TRY</option>
+    </select>
+    <span style="color:var(--text-dim);font-weight:600">→</span>
+    <select id="crossTo">
+      <option value="USD">USD</option>
+      <option value="EUR">EUR</option>
+      <option value="CNY">CNY</option>
+    </select>
+    <button class="swap-btn" id="swapCross" title="Поменять">⇄</button>
+  </div>
+  <div class="calc-result" id="crossResult">
+    <div class="big" id="crossBig">—</div>
+    <div class="detail" id="crossDetail">Выберите валюты и сумму</div>
+  </div>
+</div>
+
+<div class="footer">
+  <span>Источники: ЦБ РФ · Investing.com · XFeepay</span>
+  <span id="footerUpdated">—</span>
+  <a href="https://djtoljan.github.io/rates-dashboard/rates.json" target="_blank">rates.json</a>
+  <a href="#" id="manualRefresh">🔄 Обновить</a>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+let RATES = null;
+let PREV_RATES = null;
+let activeCalcSource = 'cbr';
+let activeCrossSource = 'xe';
+
+const PAIRS = ['USD','EUR','CNY','TRY'];
+const FLAGS = { USD:'🇺🇸', EUR:'🇪🇺', CNY:'🇨🇳', TRY:'🇹🇷' };
+const RATE_URL = 'https://djtoljan.github.io/rates-board/rates.json';
+const LOCAL_STORAGE_KEY = 'rates_dashboard_data';
+const POLL_INTERVAL = 300000; // 5 min
+
+// ─── Sparkline ───────────────────────────────────────────
+function drawSparkline(canvas, val, prev) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const color = val >= prev ? 'rgba(0,212,170,0.6)' : 'rgba(242,54,69,0.6)';
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(0, h * (1 - prev / Math.max(prev, val)));
+  ctx.lineTo(w, h * (1 - val / Math.max(prev, val)));
+  ctx.stroke();
+}
+
+// ─── Render Cards ────────────────────────────────────────
+function renderCards() {
+  if (!RATES) return;
+  const now = Date.now();
+  const updated = new Date(RATES.updated || now);
+  const age = now - updated;
+  const isStale = age > 7200000; // 2h
+  const isError = age > 14400000; // 4h
+
+  ['cbr','investing','xe','xfee'].forEach(src => {
+    const rates = RATES[src];
+    const container = document.getElementById(src+'-rates');
+    const badge = document.getElementById(src+'-badge');
+    if (!rates || Object.keys(rates).length === 0) {
+      container.innerHTML = '<span style="color:var(--bear)">Нет данных</span>';
+      badge.textContent = 'error'; badge.className = 'card-badge badge-err';
+      return;
+    }
+    badge.textContent = 'live'; badge.className = 'card-badge badge-ok';
+
+    container.innerHTML = Object.entries(rates).map(([code, val]) => {
+      const prev = PREV_RATES && PREV_RATES[src] && PREV_RATES[src][code];
+      const dirClass = prev !== undefined ? (val >= prev ? 'bull' : 'bear') : '';
+      const change = prev !== undefined ? ((val - prev) / prev * 100) : null;
+      const canvasId = `spark-${src}-${code}`;
+      const changeHtml = change !== null
+        ? `<span class="rate-change ${dirClass}">${change >= 0 ? '+' : ''}${change.toFixed(2)}%</span>`
+        : '';
+      return `<div class="rate-row">
+        <span class="rate-pair">${FLAGS[code]||''} ${code}</span>
+        <span>
+          <span class="rate-value ${dirClass}">${val.toFixed(4)}</span>
+          ${changeHtml}
+          <canvas id="${canvasId}" width="40" height="16" class="sparkline"></canvas>
+        </span>
+      </div>`;
+    }).join('');
+
+    // Draw sparklines
+    Object.entries(rates).forEach(([code, val]) => {
+      const prev = PREV_RATES && PREV_RATES[src] && PREV_RATES[src][code];
+      if (prev !== undefined) {
+        const canvas = document.getElementById(`spark-${src}-${code}`);
+        drawSparkline(canvas, val, prev);
+      }
+    });
+  });
+
+  // Status
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  if (isError) { dot.className = 'status-dot error'; } 
+  else if (isStale) { dot.className = 'status-dot stale'; }
+  else { dot.className = 'status-dot'; }
+
+  const mins = Math.floor(age / 60000);
+  if (isError) txt.textContent = `⚠ Данные устарели >${Math.floor(mins/60)}ч`;
+  else if (isStale) txt.textContent = `⚠ Обновлено ${mins} мин назад`;
+  else txt.textContent = `✅ Обновлено ${mins || '<1'} мин назад`;
+
+  renderCompTable();
+  updateCalc();
+  updateCrossCalc();
+}
+
+// ─── Comparison Table ────────────────────────────────────
+function renderCompTable() {
+  if (!RATES) return;
+  const sources = ['cbr','investing','xe','xfee'];
+  const body = document.getElementById('compBody');
+  body.innerHTML = PAIRS.map(code => {
+    let vals = {};
+    let best = -1, bestSrc = '';
+    sources.forEach(src => {
+      const r = RATES[src];
+      if (r && r[code] !== undefined) {
+        const v = r[code];
+        vals[src] = v;
+        // For cross-rates (xe/xfee): higher USD per unit = stronger = better for selling
+        if (v > best) { best = v; bestSrc = src; }
+      }
+    });
+    const hasAny = Object.keys(vals).length > 0;
+    if (!hasAny) return `<tr><td>${FLAGS[code]} ${code}</td><td colspan="5" style="color:var(--text-dim)">Нет данных</td></tr>`;
+
+    return `<tr>
+      <td><strong>${FLAGS[code]} ${code}</strong></td>
+      <td>${vals.cbr !== undefined ? vals.cbr.toFixed(4) : '—'}</td>
+      <td>${vals.investing !== undefined ? vals.investing.toFixed(4) : '—'}</td>
+      <td>${vals.xe !== undefined ? vals.xe.toFixed(4) : '—'}</td>
+      <td>${vals.xfee !== undefined ? vals.xfee.toFixed(4) : '—'}</td>
+      <td class="best-rate">${best > 0 ? best.toFixed(4) + ' (' + bestSrc + ')' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Simple Calculator ───────────────────────────────────
+function updateCalc() {
+  if (!RATES) return;
+  const source = activeCalcSource === 'cbr' ? 'cbr' : 'investing';
+  const rates = RATES[source];
+  if (!rates) return;
+
+  const amount = parseFloat(document.getElementById('calcAmount').value) || 0;
+  const cur = document.getElementById('calcCurrency').value;
+  const rate = rates[cur];
+  if (!rate) {
+    document.getElementById('calcBig').textContent = '—';
+    document.getElementById('calcDetail').textContent = `Нет курса ${cur} в источнике ${source}`;
+    return;
+  }
+  const result = amount * rate;
+  document.getElementById('calcBig').textContent = result.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ₽';
+  document.getElementById('calcDetail').textContent = `${amount.toLocaleString()} ${cur} × ${rate.toFixed(4)} ₽ = ${result.toFixed(2)} ₽ (источник: ${source === 'cbr' ? 'ЦБ РФ' : 'Investing.com'})`;
+}
+
+// ─── Cross Calculator ────────────────────────────────────
+function updateCrossCalc() {
+  if (!RATES) return;
+  const source = activeCrossSource === 'xe' ? 'xe' : 'xfee';
+  const rates = RATES[source];
+  if (!rates) return;
+
+  const amount = parseFloat(document.getElementById('crossAmount').value) || 0;
+  const from = document.getElementById('crossFrom').value;
+  const to = document.getElementById('crossTo').value;
+
+  // rates are USD per unit for xe/xfee
+  const rateFrom = rates[from];
+  const rateTo = rates[to];
+
+  if (!rateFrom || !rateTo) {
+    document.getElementById('crossBig').textContent = '—';
+    document.getElementById('crossDetail').textContent = `Нет курса ${from}→${to} в ${source}`;
+    return;
+  }
+  // Convert: amount * (rateFrom / rateTo) = amount in target
+  const crossRate = rateFrom / rateTo;
+  const result = amount * crossRate;
+  document.getElementById('crossBig').textContent = result.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  document.getElementById('crossDetail').textContent = `${amount.toLocaleString()} ${from} × (${rateFrom.toFixed(4)}/${rateTo.toFixed(4)}) = ${result.toFixed(4)} ${to} (${source})`;
+}
+
+// ─── Load Data ───────────────────────────────────────────
+async function loadRates(showToast = false) {
+  try {
+    const resp = await fetch(RATE_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    const data = await resp.json();
+    if (!data) throw new Error('Empty response');
+
+    // Save previous state
+    if (RATES) {
+      PREV_RATES = JSON.parse(JSON.stringify(RATES));
+    } else {
+      // Try to load from localStorage
+      try {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) PREV_RATES = JSON.parse(saved);
+      } catch(e) {}
+    }
+
+    RATES = data;
+    try { localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+
+    // Source badges
+    ['cbr','investing','xe','xfee'].forEach(src => {
+      const b = document.getElementById(src+'-badge');
+      if (data[src] && Object.keys(data[src]).length > 0) {
+        b.textContent = 'live'; b.className = 'card-badge badge-ok';
+      } else {
+        b.textContent = '—'; b.className = 'card-badge badge-stale';
+      }
+    });
+
+    document.getElementById('footerUpdated').textContent =
+      '🕐 ' + (data.updated ? new Date(data.updated).toLocaleString('ru-RU') : '—');
+
+    renderCards();
+
+    if (showToast) showToastMsg('✅ Данные обновлены');
+  } catch (e) {
+    console.error('Load error:', e);
+    // Try localStorage fallback
+    try {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved && !RATES) {
+        RATES = JSON.parse(saved);
+        renderCards();
+        showToastMsg('⚠ Показаны кешированные данные');
+        return;
+      }
+    } catch(e2) {}
+    document.getElementById('statusText').textContent = '❌ Ошибка загрузки';
+    document.getElementById('statusDot').className = 'status-dot error';
+  }
+}
+
+// ─── Toast ───────────────────────────────────────────────
+let toastTimer = null;
+function showToastMsg(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── Init ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  loadRates();
+
+  // Auto-refresh
+  setInterval(() => loadRates(), POLL_INTERVAL);
+
+  // Manual refresh
+  document.getElementById('manualRefresh').addEventListener('click', (e) => {
+    e.preventDefault();
+    loadRates(true);
+  });
+
+  // Calc source buttons
+  document.getElementById('sourceButtons').addEventListener('click', (e) => {
+    if (e.target.classList.contains('quick-btn')) {
+      document.querySelectorAll('#sourceButtons .quick-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      activeCalcSource = e.target.dataset.source;
+      updateCalc();
+    }
+  });
+
+  // Cross source buttons
+  document.getElementById('crossSourceButtons').addEventListener('click', (e) => {
+    if (e.target.classList.contains('quick-btn')) {
+      document.querySelectorAll('#crossSourceButtons .quick-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      activeCrossSource = e.target.dataset.source;
+      updateCrossCalc();
+    }
+  });
+
+  // Calc inputs
+  ['calcAmount','calcCurrency'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateCalc);
+    document.getElementById(id).addEventListener('change', updateCalc);
+  });
+
+  // Cross inputs
+  ['crossAmount','crossFrom','crossTo'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateCrossCalc);
+    document.getElementById(id).addEventListener('change', updateCrossCalc);
+  });
+
+  // Swap
+  document.getElementById('swapCross').addEventListener('click', () => {
+    const from = document.getElementById('crossFrom');
+    const to = document.getElementById('crossTo');
+    [from.value, to.value] = [to.value, from.value];
+    updateCrossCalc();
+  });
+
+  // Auto-refresh rates.json age display in a minute-level timer
+  setInterval(() => {
+    if (RATES && RATES.updated) {
+      const age = Date.now() - new Date(RATES.updated);
+      const mins = Math.floor(age / 60000);
+      const dot = document.getElementById('statusDot');
+      const txt = document.getElementById('statusText');
+      if (age > 14400000) { dot.className = 'status-dot error'; txt.textContent = `⚠ >${Math.floor(mins/60)}ч`; }
+      else if (age > 7200000) { dot.className = 'status-dot stale'; txt.textContent = `⚠ ${mins} мин назад`; }
+      else { txt.textContent = `✅ ${mins || '<1'} мин назад`; }
+    }
+  }, 60000);
+});
+</script>
+</body>
+</html>
